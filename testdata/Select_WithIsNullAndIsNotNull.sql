@@ -1,0 +1,1 @@
+SELECT * FROM orders WHERE customer_id IS NULL AND status IS NOT NULL

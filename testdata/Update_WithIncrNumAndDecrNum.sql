@@ -1,0 +1,1 @@
+UPDATE products SET price = ?, stock = stock + ?, stock = stock - ? WHERE id = ?
