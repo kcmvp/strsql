@@ -2,9 +2,9 @@ name: ci-gate
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   # Step 1: Check go mod tidiness
@@ -13,17 +13,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.25'
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
 
-    - name: Check go mod
-      run: |
-        go mod tidy
-        git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum is not tidied" && exit 1)
+      - name: Check go mod
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum is not tidied" && exit 1)
 
   # Step 2: Run tests (depends on go-mod passing)
   test:
@@ -34,37 +34,37 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        go-version: ['1.25', '1.26']
+        go-version: ["1.25", "1.26"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ matrix.go-version }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
-    - name: Download dependencies
-      run: go mod download
+      - name: Download dependencies
+        run: go mod download
 
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.txt ./...
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.txt ./...
 
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        slug: kcmvp/respx
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: kcmvp/strsql
 
   # Step 3: Build and lint (depends on test passing)
   build:
@@ -73,37 +73,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.25'
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
-    - name: Download dependencies
-      run: go mod download
+      - name: Download dependencies
+        run: go mod download
 
-    - name: Build
-      run: go build -v ./...
+      - name: Build
+        run: go build -v ./...
 
-    - name: Lint
-      uses: golangci/golangci-lint-action@v9
-      with:
-        version: v2.12.2
-        args: --timeout=5m --output.text.path=stdout
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          args: --timeout=5m --output.text.path=stdout
 
-    - name: Vet
-      run: go vet ./...
+      - name: Vet
+        run: go vet ./...
 
   # Summary job (depends on all previous jobs)
   ci-success:
@@ -113,6 +113,5 @@ jobs:
     if: success()
 
     steps:
-    - name: CI passed
-      run: echo "✅ All CI checks passed!"
-
+      - name: CI passed
+        run: echo "✅ All CI checks passed!"
