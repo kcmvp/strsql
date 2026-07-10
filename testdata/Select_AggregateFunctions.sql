@@ -1,0 +1,1 @@
+SELECT COUNT(*), COUNT(id), SUM(status), MAX(created_at) FROM orders WHERE is_paid = ?

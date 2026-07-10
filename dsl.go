@@ -41,6 +41,17 @@ type Mapping[T Entity] interface {
 // It provides a dot-chaining experience for users (e.g., OrderSch.Id).
 type Attribute[T Entity] func() Mapping[T]
 
+// SelectCol is an interface representing a column to be selected.
+// It can be a simple Attribute or an Aggregate function.
+type SelectCol interface {
+	SelectSQL() string
+}
+
+// Ensure Attribute implements SelectCol
+func (a Attribute[T]) SelectSQL() string {
+	return a().Column()
+}
+
 // SQLFragment holds the generated SQL query string and its corresponding arguments.
 type SQLFragment struct {
 	Query string
@@ -75,13 +86,15 @@ type Builder interface {
 
 // LimitTrait represents the pagination stage of query building.
 type LimitTrait[T Entity] interface {
-	Limit(limit int) Builder
+	// Limit sets the maximum number of records to return.
+	// An optional offset can be provided as the second argument.
+	Limit(limit int, offset ...int) Builder
 	Builder
 }
 
 // OrderByTrait represents the sorting stage of query building.
 type OrderByTrait[T Entity] interface {
-	OrderBy(attr Attribute[T], dir OrderDir) LimitTrait[T]
+	OrderBy(attr Attribute[T], dir OrderDir) OrderByTrait[T]
 	LimitTrait[T]
 }
 
@@ -114,7 +127,7 @@ type DeleteBuilder[T Entity] interface {
 
 // Select initializes a SELECT query builder for the given Entity.
 // If no columns are provided, it defaults to SELECT *.
-func Select[T Entity](cols ...Attribute[T]) SelectBuilder[T] {
+func Select[T Entity](cols ...SelectCol) SelectBuilder[T] {
 	return &selectStatement[T]{cols: cols}
 }
 
@@ -126,6 +139,51 @@ func Update[T Entity]() UpdateBuilder[T] {
 // Delete initializes a DELETE query builder for the given Entity.
 func Delete[T Entity]() DeleteBuilder[T] {
 	return &deleteStatement[T]{}
+}
+
+// ============================================================================
+// Aggregate Functions (Public)
+// ============================================================================
+
+type aggregateFunc struct {
+	expr string
+}
+
+func (a aggregateFunc) SelectSQL() string {
+	return a.expr
+}
+
+// Count constructs a COUNT(column) aggregate.
+// If no attribute is provided, it defaults to COUNT(*).
+func Count[T Entity](attrs ...Attribute[T]) SelectCol {
+	if len(attrs) == 0 {
+		return aggregateFunc{expr: "COUNT(*)"}
+	}
+	return aggregateFunc{expr: fmt.Sprintf("COUNT(%s)", attrs[0]().Column())}
+}
+
+// Sum constructs a SUM(column) aggregate.
+// It will fail-fast if the column is not numeric.
+func Sum[T Entity](attr Attribute[T]) SelectCol {
+	validateNumeric(attr(), nil) // val is nil because we only check the column type
+	return aggregateFunc{expr: fmt.Sprintf("SUM(%s)", attr().Column())}
+}
+
+// Max constructs a MAX(column) aggregate.
+func Max[T Entity](attr Attribute[T]) SelectCol {
+	return aggregateFunc{expr: fmt.Sprintf("MAX(%s)", attr().Column())}
+}
+
+// Min constructs a MIN(column) aggregate.
+func Min[T Entity](attr Attribute[T]) SelectCol {
+	return aggregateFunc{expr: fmt.Sprintf("MIN(%s)", attr().Column())}
+}
+
+// Avg constructs an AVG(column) aggregate.
+// It will fail-fast if the column is not numeric.
+func Avg[T Entity](attr Attribute[T]) SelectCol {
+	validateNumeric(attr(), nil)
+	return aggregateFunc{expr: fmt.Sprintf("AVG(%s)", attr().Column())}
 }
 
 // ============================================================================
@@ -350,10 +408,11 @@ func (m mapping[T]) mark() seal {
 
 // selectStatement implements the SelectBuilder and its related traits.
 type selectStatement[T Entity] struct {
-	cols   []Attribute[T]
+	cols   []SelectCol
 	wheres []SQLFragment
 	orders []string
 	limit  int
+	offset int
 }
 
 func (s *selectStatement[T]) Where(preds ...Predicate[T]) OrderByTrait[T] {
@@ -366,14 +425,17 @@ func (s *selectStatement[T]) Where(preds ...Predicate[T]) OrderByTrait[T] {
 	return s
 }
 
-func (s *selectStatement[T]) OrderBy(attr Attribute[T], dir OrderDir) LimitTrait[T] {
+func (s *selectStatement[T]) OrderBy(attr Attribute[T], dir OrderDir) OrderByTrait[T] {
 	meta := attr()
 	s.orders = append(s.orders, fmt.Sprintf("%s %s", meta.Column(), dir))
 	return s
 }
 
-func (s *selectStatement[T]) Limit(limit int) Builder {
+func (s *selectStatement[T]) Limit(limit int, offset ...int) Builder {
 	s.limit = limit
+	if len(offset) > 0 {
+		s.offset = offset[0]
+	}
 	return s
 }
 
@@ -388,7 +450,7 @@ func (s *selectStatement[T]) Build() (string, []any) {
 	} else {
 		var colNames []string
 		for _, col := range s.cols {
-			colNames = append(colNames, col().Column())
+			colNames = append(colNames, col.SelectSQL())
 		}
 		fmt.Fprintf(&queryBuilder, "SELECT %s FROM %s", strings.Join(colNames, ", "), model.TableName())
 	}
@@ -410,6 +472,9 @@ func (s *selectStatement[T]) Build() (string, []any) {
 
 	if s.limit > 0 {
 		fmt.Fprintf(&queryBuilder, " LIMIT %d", s.limit)
+		if s.offset > 0 {
+			fmt.Fprintf(&queryBuilder, " OFFSET %d", s.offset)
+		}
 	}
 
 	return queryBuilder.String(), finalArgs

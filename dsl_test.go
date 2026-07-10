@@ -44,13 +44,24 @@ func TestSelectBuilder(t *testing.T) {
 		},
 		{
 			name: "Select_SpecificColumns",
-			builder: strsql.Select(ProductSch.ID, ProductSch.Name).
+			builder: strsql.Select[Product](ProductSch.ID, ProductSch.Name).
 				Where(strsql.Eq(ProductSch.Price, 99.99)),
 			expectedArgs: []any{99.99},
 		},
 		{
+			name: "Select_AggregateFunctions",
+			builder: strsql.Select[Order](
+				strsql.Count[Order](),
+				strsql.Count(OrderSch.ID),
+				strsql.Sum(OrderSch.Status),
+				strsql.Max(OrderSch.CreatedAt),
+			).Where(strsql.Eq(OrderSch.IsPaid, true)),
+			expectedArgs: []any{true},
+		},
+		{
 			name: "Select_OrderByWithoutWhere",
 			builder: strsql.Select[Order]().
+				OrderBy(OrderSch.Status, strsql.Asc).
 				OrderBy(OrderSch.CreatedAt, strsql.Desc),
 			expectedArgs: nil,
 		},
@@ -58,6 +69,12 @@ func TestSelectBuilder(t *testing.T) {
 			name: "Select_LimitWithoutWhereOrOrderBy",
 			builder: strsql.Select[Order]().
 				Limit(5),
+			expectedArgs: nil,
+		},
+		{
+			name: "Select_LimitAndOffset",
+			builder: strsql.Select[Order]().
+				Limit(10, 20),
 			expectedArgs: nil,
 		},
 		{
@@ -237,6 +254,18 @@ func TestFailFastPanics(t *testing.T) {
 				// Product.ID is a string column, and we pass a string value.
 				// validateType will pass, but validateNumeric will panic because it's a string column.
 				strsql.IncrNum(ProductSch.ID, "1")
+			},
+		},
+		{
+			name: "InvalidAggregate_Sum_on_String_column",
+			panicAction: func() {
+				strsql.Sum(ProductSch.ID)
+			},
+		},
+		{
+			name: "InvalidAggregate_Avg_on_String_column",
+			panicAction: func() {
+				strsql.Avg(ProductSch.Name)
 			},
 		},
 		{

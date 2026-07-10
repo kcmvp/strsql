@@ -113,9 +113,22 @@ sql, args := strsql.Select[Order]().
 // sql:  SELECT * FROM orders WHERE order_id = ? AND order_id IN (?, ?) ORDER BY creation_date DESC LIMIT 10
 // args: [ORD-12345 O1 O2]
 
-// Specific Columns: SELECT order_id, creation_date
-sql, args = strsql.Select(OrderSch.Id, OrderSch.OrdDate).
-    Where(strsql.Eq(OrderSch.Id, "ORD-12345")).
+// Specific Columns & Aggregate Functions
+sql, args = strsql.Select[Order](
+    OrderSch.Id,
+    strsql.Count(OrderSch.Id),
+    strsql.Sum(OrderSch.Status),
+).Where(strsql.Eq(OrderSch.IsPaid, true)).Build()
+```
+
+#### Pagination (Limit & Offset)
+
+The `Limit` method accepts an optional second argument for the `OFFSET`.
+
+```go
+sql, args := strsql.Select[Order]().
+    OrderBy(OrderSch.OrdDate, strsql.Desc).
+    Limit(10, 20). // LIMIT 10 OFFSET 20
     Build()
 ```
 
@@ -192,6 +205,14 @@ sql, args := strsql.Delete[Order]().
 - `Between` (BETWEEN ? AND ?)
 - `IsNull` (IS NULL)
 - `IsNotNull` (IS NOT NULL)
+
+**Aggregate Functions:**
+
+- `Count` (COUNT(col) or COUNT(\*))
+- `Sum` (SUM(col))
+- `Max` (MAX(col))
+- `Min` (MIN(col))
+- `Avg` (AVG(col))
 
 **Assignments (SET clauses):**
 
