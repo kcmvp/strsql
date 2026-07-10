@@ -52,12 +52,17 @@ func TestSelectBuilder(t *testing.T) {
 							strsql.Eq(models.OrderSch.IsPaid, true),
 							strsql.In(models.OrderSch.CustomerID, "C-1", "C-2"),
 						),
+						strsql.NotEq(models.OrderSch.Status, 0),
+						strsql.Gt(models.OrderSch.Status, -1),
+						strsql.Gte(models.OrderSch.Status, 1),
+						strsql.Lte(models.OrderSch.Status, 99),
+						strsql.Like(models.OrderSch.CustomerID, "C-%"),
 					),
 					strsql.Lt(models.OrderSch.CreatedAt, now),
 				).
 				OrderBy(models.OrderSch.CreatedAt, strsql.Desc).
 				Limit(10),
-			expectedArgs: []any{1, true, "C-1", "C-2", now},
+			expectedArgs: []any{1, true, "C-1", "C-2", 0, -1, 1, 99, "C-%", now},
 		},
 		{
 			name: "Select_WithIsNullAndIsNotNull",
@@ -67,6 +72,17 @@ func TestSelectBuilder(t *testing.T) {
 					strsql.IsNotNull(models.OrderSch.Status),
 				),
 			expectedArgs: nil,
+		},
+		{
+			name: "Select_WithEmptyAndOr",
+			builder: strsql.Select[models.Order]().
+				Where(
+					strsql.And[models.Order](),
+					strsql.Or[models.Order](),
+					strsql.And(strsql.Eq(models.OrderSch.ID, "ORD-123")),
+					strsql.Or(strsql.Eq(models.OrderSch.Status, 1)),
+				),
+			expectedArgs: []any{"ORD-123", 1},
 		},
 	}
 
@@ -183,7 +199,11 @@ func TestFailFastPanics(t *testing.T) {
 		{
 			name: "InvalidMathOp_IncrNum_on_String_column",
 			panicAction: func() {
-				strsql.IncrNum(models.ProductSch.ID, 1)
+				// We need to bypass the `validateType` check first to hit the `default`
+				// branch in `validateNumeric`. The easiest way is to pass a string to a string column.
+				// Product.ID is a string column, and we pass a string value.
+				// validateType will pass, but validateNumeric will panic because it's a string column.
+				strsql.IncrNum(models.ProductSch.ID, "1")
 			},
 		},
 		{

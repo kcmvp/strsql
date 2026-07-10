@@ -1,1 +1,1 @@
-SELECT * FROM orders WHERE (status = ? AND (is_paid = ? OR customer_id IN (?, ?))) AND created_at < ? ORDER BY created_at DESC LIMIT 10
+SELECT * FROM orders WHERE (status = ? AND (is_paid = ? OR customer_id IN (?, ?)) AND status <> ? AND status > ? AND status >= ? AND status <= ? AND customer_id LIKE ?) AND created_at < ? ORDER BY created_at DESC LIMIT 10
