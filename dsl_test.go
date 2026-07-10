@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kcmvp/strsql"
-	"github.com/kcmvp/strsql/testdata/models"
+	. "github.com/kcmvp/strsql/testdata/models"
 )
 
 func loadSQL(t *testing.T, name string) string {
@@ -32,55 +32,72 @@ func TestSelectBuilder(t *testing.T) {
 	}{
 		{
 			name: "Select_Simple",
-			builder: strsql.Select[models.Order]().
-				Where(strsql.Eq(models.OrderSch.ID, "ORD-123")),
+			builder: strsql.Select[Order]().
+				Where(strsql.Eq(OrderSch.ID, "ORD-123")),
 			expectedArgs: []any{"ORD-123"},
 		},
 		{
 			name: "Select_WithoutWhere",
-			builder: strsql.Select[models.Order]().
+			builder: strsql.Select[Order]().
 				Limit(50),
 			expectedArgs: nil,
 		},
 		{
+			name: "Select_OrderByWithoutWhere",
+			builder: strsql.Select[Order]().
+				OrderBy(OrderSch.CreatedAt, strsql.Desc),
+			expectedArgs: nil,
+		},
+		{
+			name: "Select_LimitWithoutWhereOrOrderBy",
+			builder: strsql.Select[Order]().
+				Limit(5),
+			expectedArgs: nil,
+		},
+		{
+			name:         "Select_All",
+			builder:      strsql.Select[Order](),
+			expectedArgs: nil,
+		},
+		{
 			name: "Select_ComplexWithLogicCombinators",
-			builder: strsql.Select[models.Order]().
+			builder: strsql.Select[Order]().
 				Where(
 					strsql.And(
-						strsql.Eq(models.OrderSch.Status, 1),
+						strsql.Eq(OrderSch.Status, 1),
 						strsql.Or(
-							strsql.Eq(models.OrderSch.IsPaid, true),
-							strsql.In(models.OrderSch.CustomerID, "C-1", "C-2"),
+							strsql.Eq(OrderSch.IsPaid, true),
+							strsql.In(OrderSch.CustomerID, "C-1", "C-2"),
 						),
-						strsql.NotEq(models.OrderSch.Status, 0),
-						strsql.Gt(models.OrderSch.Status, -1),
-						strsql.Gte(models.OrderSch.Status, 1),
-						strsql.Lte(models.OrderSch.Status, 99),
-						strsql.Like(models.OrderSch.CustomerID, "C-%"),
+						strsql.NotEq(OrderSch.Status, 0),
+						strsql.Gt(OrderSch.Status, -1),
+						strsql.Gte(OrderSch.Status, 1),
+						strsql.Lte(OrderSch.Status, 99),
+						strsql.Like(OrderSch.CustomerID, "C-%"),
 					),
-					strsql.Lt(models.OrderSch.CreatedAt, now),
+					strsql.Lt(OrderSch.CreatedAt, now),
 				).
-				OrderBy(models.OrderSch.CreatedAt, strsql.Desc).
+				OrderBy(OrderSch.CreatedAt, strsql.Desc).
 				Limit(10),
 			expectedArgs: []any{1, true, "C-1", "C-2", 0, -1, 1, 99, "C-%", now},
 		},
 		{
 			name: "Select_WithIsNullAndIsNotNull",
-			builder: strsql.Select[models.Order]().
+			builder: strsql.Select[Order]().
 				Where(
-					strsql.IsNull(models.OrderSch.CustomerID),
-					strsql.IsNotNull(models.OrderSch.Status),
+					strsql.IsNull(OrderSch.CustomerID),
+					strsql.IsNotNull(OrderSch.Status),
 				),
 			expectedArgs: nil,
 		},
 		{
 			name: "Select_WithEmptyAndOr",
-			builder: strsql.Select[models.Order]().
+			builder: strsql.Select[Order]().
 				Where(
-					strsql.And[models.Order](),
-					strsql.Or[models.Order](),
-					strsql.And(strsql.Eq(models.OrderSch.ID, "ORD-123")),
-					strsql.Or(strsql.Eq(models.OrderSch.Status, 1)),
+					strsql.And[Order](),
+					strsql.Or[Order](),
+					strsql.And(strsql.Eq(OrderSch.ID, "ORD-123")),
+					strsql.Or(strsql.Eq(OrderSch.Status, 1)),
 				),
 			expectedArgs: []any{"ORD-123", 1},
 		},
@@ -110,26 +127,26 @@ func TestUpdateBuilder(t *testing.T) {
 	}{
 		{
 			name: "Update_Simple",
-			builder: strsql.Update[models.Product]().
-				Set(strsql.Set(models.ProductSch.Price, 99.99)).
-				Where(strsql.Eq(models.ProductSch.ID, "P-123")),
+			builder: strsql.Update[Product]().
+				Set(strsql.Set(ProductSch.Price, 99.99)).
+				Where(strsql.Eq(ProductSch.ID, "P-123")),
 			expectedArgs: []any{99.99, "P-123"},
 		},
 		{
 			name: "Update_WithIncrNumAndDecrNum",
-			builder: strsql.Update[models.Product]().
+			builder: strsql.Update[Product]().
 				Set(
-					strsql.Set(models.ProductSch.Price, 100.00),
-					strsql.IncrNum(models.ProductSch.Stock, 10),
-					strsql.DecrNum(models.ProductSch.Stock, 2),
+					strsql.Set(ProductSch.Price, 100.00),
+					strsql.IncrNum(ProductSch.Stock, 10),
+					strsql.DecrNum(ProductSch.Stock, 2),
 				).
-				Where(strsql.Eq(models.ProductSch.ID, "P-123")),
+				Where(strsql.Eq(ProductSch.ID, "P-123")),
 			expectedArgs: []any{100.00, 10, 2, "P-123"},
 		},
 		{
 			name: "Update_WithoutWhere",
-			builder: strsql.Update[models.Product]().
-				Set(strsql.Set(models.ProductSch.Stock, 0)),
+			builder: strsql.Update[Product]().
+				Set(strsql.Set(ProductSch.Stock, 0)),
 			expectedArgs: []any{0},
 		},
 	}
@@ -158,13 +175,13 @@ func TestDeleteBuilder(t *testing.T) {
 	}{
 		{
 			name: "Delete_Simple",
-			builder: strsql.Delete[models.OrderItem]().
-				Where(strsql.Eq(models.OrderItemSch.OrderID, "ORD-123")),
+			builder: strsql.Delete[OrderItem]().
+				Where(strsql.Eq(OrderItemSch.OrderID, "ORD-123")),
 			expectedArgs: []any{"ORD-123"},
 		},
 		{
 			name:         "Delete_WithoutWhere",
-			builder:      strsql.Delete[models.OrderItem](),
+			builder:      strsql.Delete[OrderItem](),
 			expectedArgs: nil,
 		},
 	}
@@ -193,7 +210,7 @@ func TestFailFastPanics(t *testing.T) {
 		{
 			name: "TypeMismatch_String_passed_to_Int_column",
 			panicAction: func() {
-				strsql.Eq(models.OrderItemSch.Quantity, "not_an_int")
+				strsql.Eq(OrderItemSch.Quantity, "not_an_int")
 			},
 		},
 		{
@@ -203,13 +220,13 @@ func TestFailFastPanics(t *testing.T) {
 				// branch in `validateNumeric`. The easiest way is to pass a string to a string column.
 				// Product.ID is a string column, and we pass a string value.
 				// validateType will pass, but validateNumeric will panic because it's a string column.
-				strsql.IncrNum(models.ProductSch.ID, "1")
+				strsql.IncrNum(ProductSch.ID, "1")
 			},
 		},
 		{
 			name: "EmptyInClause_No_variadic_arguments",
 			panicAction: func() {
-				strsql.In(models.OrderSch.ID)
+				strsql.In(OrderSch.ID)
 			},
 		},
 	}
