@@ -1,3 +1,24 @@
+<p align="center">
+  A highly opinionated, strictly-typed, and functional SQL DSL generator for Go.
+  <br/>
+  <br/>
+  <a href="https://github.com/kcmvp/strsql/blob/main/LICENSE">
+    <img alt="GitHub" src="https://img.shields.io/github/license/kcmvp/strsql"/>
+  </a>
+  <a href="https://pkg.go.dev/github.com/kcmvp/strsql">
+    <img src="https://pkg.go.dev/badge/github.com/kcmvp/strsql.svg" alt="Go Reference"/>
+  </a>
+  <a href="https://goreportcard.com/report/github.com/kcmvp/strsql">
+    <img src="https://goreportcard.com/badge/github.com/kcmvp/strsql" alt="report"/>
+  </a>
+  <a href="https://github.com/kcmvp/strsql/blob/main/.github/workflows/ci.yml" rel="nofollow">
+     <img src="https://img.shields.io/github/actions/workflow/status/kcmvp/strsql/ci.yml?branch=main" alt="Build" />
+  </a>
+  <a href="https://app.codecov.io/gh/kcmvp/strsql" ref="nofollow">
+    <img src ="https://img.shields.io/codecov/c/github/kcmvp/strsql" alt="coverage"/>
+  </a>
+</p>
+
 # strsql
 
 `strsql` is a highly opinionated, strictly-typed, and functional SQL DSL generator for Go.
