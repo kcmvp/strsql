@@ -355,7 +355,7 @@ func (s *selectStatement[T]) Build() (string, []any) {
 	var finalArgs []any
 
 	model := *new(T)
-	queryBuilder.WriteString(fmt.Sprintf("SELECT * FROM %s", model.TableName()))
+	fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
 
 	if len(s.wheres) > 0 {
 		queryBuilder.WriteString(" WHERE ")
@@ -373,7 +373,7 @@ func (s *selectStatement[T]) Build() (string, []any) {
 	}
 
 	if s.limit > 0 {
-		queryBuilder.WriteString(fmt.Sprintf(" LIMIT %d", s.limit))
+		fmt.Fprintf(&queryBuilder, " LIMIT %d", s.limit)
 	}
 
 	return queryBuilder.String(), finalArgs
@@ -407,7 +407,7 @@ func (u *updateStatement[T]) Build() (string, []any) {
 	var finalArgs []any
 
 	model := *new(T)
-	queryBuilder.WriteString(fmt.Sprintf("UPDATE %s SET ", model.TableName()))
+	fmt.Fprintf(&queryBuilder, "UPDATE %s SET ", model.TableName())
 
 	var setQueries []string
 	for _, s := range u.sets {
@@ -449,7 +449,7 @@ func (d *deleteStatement[T]) Build() (string, []any) {
 	var finalArgs []any
 
 	model := *new(T)
-	queryBuilder.WriteString(fmt.Sprintf("DELETE FROM %s", model.TableName()))
+	fmt.Fprintf(&queryBuilder, "DELETE FROM %s", model.TableName())
 
 	if len(d.wheres) > 0 {
 		queryBuilder.WriteString(" WHERE ")

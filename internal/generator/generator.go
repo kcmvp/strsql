@@ -232,7 +232,7 @@ func GenerateSchema(dir string, pkgName string, models []ModelInfo) error {
 	if err != nil {
 		// 如果格式化失败，还是把原始的写入，方便排查错误
 		outPath := filepath.Join(dir, "strsql_gen.go")
-		os.WriteFile(outPath, buf.Bytes(), 0644)
+		_ = os.WriteFile(outPath, buf.Bytes(), 0644)
 		return fmt.Errorf("failed to format generated code: %w", err)
 	}
 
