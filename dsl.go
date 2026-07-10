@@ -113,8 +113,9 @@ type DeleteBuilder[T Entity] interface {
 // ============================================================================
 
 // Select initializes a SELECT query builder for the given Entity.
-func Select[T Entity]() SelectBuilder[T] {
-	return &selectStatement[T]{}
+// If no columns are provided, it defaults to SELECT *.
+func Select[T Entity](cols ...Attribute[T]) SelectBuilder[T] {
+	return &selectStatement[T]{cols: cols}
 }
 
 // Update initializes an UPDATE query builder for the given Entity.
@@ -205,6 +206,13 @@ func Like[T Entity](attr Attribute[T], val any) Predicate[T] {
 	}, []any{val}, validateType)
 }
 
+// NotLike constructs a NOT LIKE condition: column NOT LIKE ?
+func NotLike[T Entity](attr Attribute[T], val any) Predicate[T] {
+	return wrapOp(attr, func(col string) string {
+		return fmt.Sprintf("%s NOT LIKE ?", col)
+	}, []any{val}, validateType)
+}
+
 // IsNull constructs an IS NULL condition: column IS NULL
 func IsNull[T Entity](attr Attribute[T]) Predicate[T] {
 	return wrapOp(attr, func(col string) string {
@@ -228,6 +236,24 @@ func In[T Entity](attr Attribute[T], vals ...any) Predicate[T] {
 		}
 		return fmt.Sprintf("%s IN (%s)", col, strings.Join(placeholders, ", "))
 	}, vals, validateNotEmpty, validateType)
+}
+
+// NotIn constructs a NOT IN condition: column NOT IN (?, ?, ?)
+func NotIn[T Entity](attr Attribute[T], vals ...any) Predicate[T] {
+	return wrapOp(attr, func(col string) string {
+		placeholders := make([]string, len(vals))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		return fmt.Sprintf("%s NOT IN (%s)", col, strings.Join(placeholders, ", "))
+	}, vals, validateNotEmpty, validateType)
+}
+
+// Between constructs a BETWEEN condition: column BETWEEN ? AND ?
+func Between[T Entity](attr Attribute[T], start, end any) Predicate[T] {
+	return wrapOp(attr, func(col string) string {
+		return fmt.Sprintf("%s BETWEEN ? AND ?", col)
+	}, []any{start, end}, validateType)
 }
 
 // And combines multiple predicates with logical AND: (cond1 AND cond2 AND ...)
@@ -324,6 +350,7 @@ func (m mapping[T]) mark() seal {
 
 // selectStatement implements the SelectBuilder and its related traits.
 type selectStatement[T Entity] struct {
+	cols   []Attribute[T]
 	wheres []SQLFragment
 	orders []string
 	limit  int
@@ -355,7 +382,16 @@ func (s *selectStatement[T]) Build() (string, []any) {
 	var finalArgs []any
 
 	model := *new(T)
-	fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
+
+	if len(s.cols) == 0 {
+		fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
+	} else {
+		var colNames []string
+		for _, col := range s.cols {
+			colNames = append(colNames, col().Column())
+		}
+		fmt.Fprintf(&queryBuilder, "SELECT %s FROM %s", strings.Join(colNames, ", "), model.TableName())
+	}
 
 	if len(s.wheres) > 0 {
 		queryBuilder.WriteString(" WHERE ")

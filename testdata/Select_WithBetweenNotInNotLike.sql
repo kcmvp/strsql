@@ -1,0 +1,1 @@
+SELECT * FROM orders WHERE status BETWEEN ? AND ? AND customer_id NOT IN (?, ?) AND customer_id NOT LIKE ?

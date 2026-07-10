@@ -100,6 +100,7 @@ Enjoy the flawless IDE autocompletion and compile-time/runtime safety.
 ```go
 import "github.com/kcmvp/strsql"
 
+// Default: SELECT *
 sql, args := strsql.Select[Order]().
     Where(
         strsql.Eq(OrderSch.Id, "ORD-12345"),
@@ -111,6 +112,11 @@ sql, args := strsql.Select[Order]().
 
 // sql:  SELECT * FROM orders WHERE order_id = ? AND order_id IN (?, ?) ORDER BY creation_date DESC LIMIT 10
 // args: [ORD-12345 O1 O2]
+
+// Specific Columns: SELECT order_id, creation_date
+sql, args = strsql.Select(OrderSch.Id, OrderSch.OrdDate).
+    Where(strsql.Eq(OrderSch.Id, "ORD-12345")).
+    Build()
 ```
 
 #### Complex Logic Combinators (And / Or)
@@ -125,8 +131,8 @@ sql, args := strsql.Select[Order]().
             strsql.And(
                 strsql.NotEq(OrderSch.Id, "O-B"),
                 strsql.Like(OrderSch.Id, "%O-C%"),
-                strsql.Lt(OrderSch.OrdDate, time.Now()),
-                strsql.IsNotNull(OrderSch.OrdDate),
+                strsql.Between(OrderSch.Status, 1, 5),
+                strsql.NotIn(OrderSch.Id, "O-X", "O-Y"),
             ),
         ),
     ).
@@ -180,7 +186,10 @@ sql, args := strsql.Delete[Order]().
 - `Lt` (<)
 - `Lte` (<=)
 - `Like` (LIKE)
+- `NotLike` (NOT LIKE)
 - `In` (IN)
+- `NotIn` (NOT IN)
+- `Between` (BETWEEN ? AND ?)
 - `IsNull` (IS NULL)
 - `IsNotNull` (IS NOT NULL)
 

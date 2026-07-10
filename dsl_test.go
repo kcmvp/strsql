@@ -43,6 +43,12 @@ func TestSelectBuilder(t *testing.T) {
 			expectedArgs: nil,
 		},
 		{
+			name: "Select_SpecificColumns",
+			builder: strsql.Select(ProductSch.ID, ProductSch.Name).
+				Where(strsql.Eq(ProductSch.Price, 99.99)),
+			expectedArgs: []any{99.99},
+		},
+		{
 			name: "Select_OrderByWithoutWhere",
 			builder: strsql.Select[Order]().
 				OrderBy(OrderSch.CreatedAt, strsql.Desc),
@@ -80,6 +86,16 @@ func TestSelectBuilder(t *testing.T) {
 				OrderBy(OrderSch.CreatedAt, strsql.Desc).
 				Limit(10),
 			expectedArgs: []any{1, true, "C-1", "C-2", 0, -1, 1, 99, "C-%", now},
+		},
+		{
+			name: "Select_WithBetweenNotInNotLike",
+			builder: strsql.Select[Order]().
+				Where(
+					strsql.Between(OrderSch.Status, 1, 5),
+					strsql.NotIn(OrderSch.CustomerID, "C-99", "C-100"),
+					strsql.NotLike(OrderSch.CustomerID, "TEST-%"),
+				),
+			expectedArgs: []any{1, 5, "C-99", "C-100", "TEST-%"},
 		},
 		{
 			name: "Select_WithIsNullAndIsNotNull",
