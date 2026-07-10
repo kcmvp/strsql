@@ -482,9 +482,12 @@ func validateType(meta Mapping[Entity], vals ...any) {
 func validateNumeric(meta Mapping[Entity], vals ...any) {
 	typ := meta.Type()
 	kind := typ.Kind()
-	if kind == reflect.Ptr {
+
+	// Dereference pointer to get the underlying kind
+	if kind == reflect.Pointer {
 		kind = typ.Elem().Kind()
 	}
+
 	switch kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
