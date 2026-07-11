@@ -134,6 +134,12 @@ func TestSelectBuilder(t *testing.T) {
 				),
 			expectedArgs: []any{"ORD-123", 1},
 		},
+		{
+			name: "WithJoin_Simple",
+			builder: strsql.Select[Order]().
+				Where(strsql.WithJoin(OrderSch.ID, OrderItemSch.OrderID, strsql.Gt(OrderItemSch.Quantity, 1))),
+			expectedArgs: []any{1},
+		},
 	}
 
 	for _, tt := range tests {

@@ -372,6 +372,28 @@ func Or[T Entity](preds ...Predicate[T]) Predicate[T] {
 	}
 }
 
+// WithJoin constructs an EXISTS subquery condition.
+// It correlates the main entity S with the joined entity T.
+func WithJoin[S, T Entity](sAttr Attribute[S], tAttr Attribute[T], preds ...Predicate[T]) Predicate[S] {
+	return func() SQLFragment {
+		var s S
+		var t T
+		subQueries := []string{fmt.Sprintf("%s.%s = %s.%s", t.TableName(), tAttr().Column(), s.TableName(), sAttr().Column())}
+		var args []any
+
+		for _, p := range preds {
+			frag := p()
+			subQueries = append(subQueries, frag.Query)
+			args = append(args, frag.Args...)
+		}
+
+		return SQLFragment{
+			Query: fmt.Sprintf("EXISTS (SELECT 1 FROM %s WHERE %s)", t.TableName(), strings.Join(subQueries, " AND ")),
+			Args:  args,
+		}
+	}
+}
+
 // ============================================================================
 // Private Types & Implementations
 // ============================================================================
