@@ -127,12 +127,19 @@ func TestSelectBuilder(t *testing.T) {
 			name: "Select_WithEmptyAndOr",
 			builder: strsql.Select[Order]().
 				Where(
-					strsql.And[Order](),
-					strsql.Or[Order](),
+					strsql.And(),
+					strsql.Or(),
 					strsql.And(strsql.Eq(OrderSch.ID, "ORD-123")),
 					strsql.Or(strsql.Eq(OrderSch.Status, 1)),
 				),
 			expectedArgs: []any{"ORD-123", 1},
+		},
+		{
+			name: "WithJoin_Simple",
+			builder: strsql.WithJoin(OrderSch.ID, OrderItemSch.OrderID).
+				Select(OrderSch.ID, OrderSch.CustomerID, OrderSch.Status, OrderSch.IsPaid, OrderSch.CreatedAt).
+				Where(strsql.Gt(OrderItemSch.Quantity, 1)),
+			expectedArgs: []any{1},
 		},
 	}
 

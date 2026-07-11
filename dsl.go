@@ -52,6 +52,24 @@ func (a Attribute[T]) SelectSQL() string {
 	return a().Column()
 }
 
+// AnyAttribute represents any typed attribute, used for Join condition.
+type AnyAttribute interface {
+	SelectCol
+	Column() string
+	TableName() string
+	FullColumn() string
+}
+
+func (a Attribute[T]) TableName() string {
+	var t T
+	return t.TableName()
+}
+
+func (a Attribute[T]) FullColumn() string {
+	var t T
+	return t.TableName() + "." + a().Column()
+}
+
 // SQLFragment holds the generated SQL query string and its corresponding arguments.
 type SQLFragment struct {
 	Query string
@@ -59,7 +77,13 @@ type SQLFragment struct {
 }
 
 // Predicate is a closure that evaluates to a SQL condition fragment.
-type Predicate[T Entity] func() SQLFragment
+type AnyPredicate interface{ SQLFragment() SQLFragment }
+
+type Predicate[T Entity] interface{ AnyPredicate }
+
+type predicateImpl[T Entity] struct{ fn func() SQLFragment }
+
+func (p predicateImpl[T]) SQLFragment() SQLFragment { return p.fn() }
 
 // Assignment is a closure that evaluates to a SQL assignment fragment (e.g., for UPDATE).
 type Assignment[T Entity] func() SQLFragment
@@ -100,13 +124,13 @@ type OrderByTrait[T Entity] interface {
 
 // SelectBuilder is the entry stage of building a SELECT query.
 type SelectBuilder[T Entity] interface {
-	Where(preds ...Predicate[T]) OrderByTrait[T]
+	Where(preds ...AnyPredicate) OrderByTrait[T]
 	OrderByTrait[T]
 }
 
 // UpdateWhereTrait represents the condition stage of an UPDATE query.
 type UpdateWhereTrait[T Entity] interface {
-	Where(preds ...Predicate[T]) Builder
+	Where(preds ...AnyPredicate) Builder
 	Builder // Allows building without Where (update all rows)
 }
 
@@ -117,7 +141,7 @@ type UpdateBuilder[T Entity] interface {
 
 // DeleteBuilder is the entry stage of building a DELETE query.
 type DeleteBuilder[T Entity] interface {
-	Where(preds ...Predicate[T]) Builder
+	Where(preds ...AnyPredicate) Builder
 	Builder // Allows building without Where (delete all rows)
 }
 
@@ -192,21 +216,21 @@ func Avg[T Entity](attr Attribute[T]) SelectCol {
 
 // Set constructs an assignment expression: column = ?
 func Set[T Entity](attr Attribute[T], val any) Assignment[T] {
-	return wrapOp(attr, func(col string) string {
+	return wrapAssignment(attr, func(col string) string {
 		return fmt.Sprintf("%s = ?", col)
 	}, []any{val}, validateType)
 }
 
 // IncrNum constructs an increment assignment expression: column = column + ?
 func IncrNum[T Entity](attr Attribute[T], val any) Assignment[T] {
-	return wrapOp(attr, func(col string) string {
+	return wrapAssignment(attr, func(col string) string {
 		return fmt.Sprintf("%s = %s + ?", col, col)
 	}, []any{val}, validateType, validateNumeric)
 }
 
 // DecrNum constructs a decrement assignment expression: column = column - ?
 func DecrNum[T Entity](attr Attribute[T], val any) Assignment[T] {
-	return wrapOp(attr, func(col string) string {
+	return wrapAssignment(attr, func(col string) string {
 		return fmt.Sprintf("%s = %s - ?", col, col)
 	}, []any{val}, validateType, validateNumeric)
 }
@@ -315,8 +339,8 @@ func Between[T Entity](attr Attribute[T], start, end any) Predicate[T] {
 }
 
 // And combines multiple predicates with logical AND: (cond1 AND cond2 AND ...)
-func And[T Entity](preds ...Predicate[T]) Predicate[T] {
-	return func() SQLFragment {
+func And(preds ...AnyPredicate) AnyPredicate {
+	return predicateImpl[Entity]{fn: func() SQLFragment {
 		if len(preds) == 0 {
 			return SQLFragment{}
 		}
@@ -325,7 +349,7 @@ func And[T Entity](preds ...Predicate[T]) Predicate[T] {
 		var args []any
 
 		for _, p := range preds {
-			frag := p()
+			frag := p.SQLFragment()
 			if frag.Query != "" {
 				queries = append(queries, frag.Query)
 				args = append(args, frag.Args...)
@@ -340,12 +364,12 @@ func And[T Entity](preds ...Predicate[T]) Predicate[T] {
 			Query: fmt.Sprintf("(%s)", strings.Join(queries, " AND ")),
 			Args:  args,
 		}
-	}
+	}}
 }
 
 // Or combines multiple predicates with logical OR: (cond1 OR cond2 OR ...)
-func Or[T Entity](preds ...Predicate[T]) Predicate[T] {
-	return func() SQLFragment {
+func Or(preds ...AnyPredicate) AnyPredicate {
+	return predicateImpl[Entity]{fn: func() SQLFragment {
 		if len(preds) == 0 {
 			return SQLFragment{}
 		}
@@ -354,7 +378,7 @@ func Or[T Entity](preds ...Predicate[T]) Predicate[T] {
 		var args []any
 
 		for _, p := range preds {
-			frag := p()
+			frag := p.SQLFragment()
 			if frag.Query != "" {
 				queries = append(queries, frag.Query)
 				args = append(args, frag.Args...)
@@ -369,6 +393,52 @@ func Or[T Entity](preds ...Predicate[T]) Predicate[T] {
 			Query: fmt.Sprintf("(%s)", strings.Join(queries, " OR ")),
 			Args:  args,
 		}
+	}}
+}
+
+// JoinType defines the type of SQL JOIN.
+type JoinType string
+
+const (
+	InnerJoin JoinType = "INNER JOIN"
+	LeftJoin  JoinType = "LEFT JOIN"
+	RightJoin JoinType = "RIGHT JOIN"
+)
+
+// JoinContext provides a context for building queries with joined tables.
+type JoinContext[T Entity] interface {
+	Join(joinType JoinType, leftAttr AnyAttribute, rightAttr AnyAttribute) JoinContext[T]
+	Select(cols ...SelectCol) SelectBuilder[T]
+}
+
+func WithJoin[S, T Entity](sAttr Attribute[S], tAttr Attribute[T]) JoinContext[S] {
+	ctx := &joinContext[S]{}
+	return ctx.Join(InnerJoin, sAttr, tAttr)
+}
+
+func WithLeftJoin[S, T Entity](sAttr Attribute[S], tAttr Attribute[T]) JoinContext[S] {
+	ctx := &joinContext[S]{}
+	return ctx.Join(LeftJoin, sAttr, tAttr)
+}
+
+func WithRightJoin[S, T Entity](sAttr Attribute[S], tAttr Attribute[T]) JoinContext[S] {
+	ctx := &joinContext[S]{}
+	return ctx.Join(RightJoin, sAttr, tAttr)
+}
+
+type joinContext[S Entity] struct {
+	joins []string
+}
+
+func (c *joinContext[S]) Join(joinType JoinType, leftAttr AnyAttribute, rightAttr AnyAttribute) JoinContext[S] {
+	c.joins = append(c.joins, string(joinType)+" "+rightAttr.TableName()+" ON "+leftAttr.FullColumn()+" = "+rightAttr.FullColumn())
+	return c
+}
+
+func (c *joinContext[S]) Select(cols ...SelectCol) SelectBuilder[S] {
+	return &selectStatement[S]{
+		joins: c.joins,
+		cols:  cols,
 	}
 }
 
@@ -408,6 +478,7 @@ func (m mapping[T]) mark() seal {
 
 // selectStatement implements the SelectBuilder and its related traits.
 type selectStatement[T Entity] struct {
+	joins  []string
 	cols   []SelectCol
 	wheres []SQLFragment
 	orders []string
@@ -415,9 +486,9 @@ type selectStatement[T Entity] struct {
 	offset int
 }
 
-func (s *selectStatement[T]) Where(preds ...Predicate[T]) OrderByTrait[T] {
+func (s *selectStatement[T]) Where(preds ...AnyPredicate) OrderByTrait[T] {
 	for _, p := range preds {
-		frag := p()
+		frag := p.SQLFragment()
 		if frag.Query != "" {
 			s.wheres = append(s.wheres, frag)
 		}
@@ -446,13 +517,22 @@ func (s *selectStatement[T]) Build() (string, []any) {
 	model := *new(T)
 
 	if len(s.cols) == 0 {
-		fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
+		if len(s.joins) > 0 {
+			fmt.Fprintf(&queryBuilder, "SELECT %s.* FROM %s", model.TableName(), model.TableName())
+		} else {
+			fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
+		}
 	} else {
 		var colNames []string
 		for _, col := range s.cols {
 			colNames = append(colNames, col.SelectSQL())
 		}
 		fmt.Fprintf(&queryBuilder, "SELECT %s FROM %s", strings.Join(colNames, ", "), model.TableName())
+	}
+
+	if len(s.joins) > 0 {
+		queryBuilder.WriteString(" ")
+		queryBuilder.WriteString(strings.Join(s.joins, " "))
 	}
 
 	if len(s.wheres) > 0 {
@@ -493,9 +573,9 @@ func (u *updateStatement[T]) Set(assignments ...Assignment[T]) UpdateWhereTrait[
 	return u
 }
 
-func (u *updateStatement[T]) Where(preds ...Predicate[T]) Builder {
+func (u *updateStatement[T]) Where(preds ...AnyPredicate) Builder {
 	for _, p := range preds {
-		frag := p()
+		frag := p.SQLFragment()
 		if frag.Query != "" {
 			u.wheres = append(u.wheres, frag)
 		}
@@ -535,9 +615,9 @@ type deleteStatement[T Entity] struct {
 	wheres []SQLFragment
 }
 
-func (d *deleteStatement[T]) Where(preds ...Predicate[T]) Builder {
+func (d *deleteStatement[T]) Where(preds ...AnyPredicate) Builder {
 	for _, p := range preds {
-		frag := p()
+		frag := p.SQLFragment()
 		if frag.Query != "" {
 			d.wheres = append(d.wheres, frag)
 		}
@@ -608,12 +688,33 @@ func validateNotEmpty(meta Mapping[Entity], vals ...any) {
 
 // wrapOp is a higher-order function that extracts metadata, runs validators,
 // and returns the SQLFragment closure.
+func wrapAssignment[T Entity](
+	attr Attribute[T],
+	queryFn func(column string) string,
+	vals []any,
+	validators ...Validator,
+) Assignment[T] {
+	meta := attr()
+	m := meta.(Mapping[Entity])
+
+	for _, validate := range validators {
+		validate(m, vals...)
+	}
+
+	return func() SQLFragment {
+		return SQLFragment{
+			Query: queryFn(m.Column()),
+			Args:  vals,
+		}
+	}
+}
+
 func wrapOp[T Entity](
 	attr Attribute[T],
 	queryFn func(column string) string,
 	vals []any,
 	validators ...Validator,
-) func() SQLFragment {
+) Predicate[T] {
 	meta := attr()
 	m := meta.(Mapping[Entity])
 
@@ -623,10 +724,16 @@ func wrapOp[T Entity](
 	}
 
 	// Return the final closure
-	return func() SQLFragment {
-		return SQLFragment{
-			Query: queryFn(m.Column()),
-			Args:  vals,
-		}
+	return predicateImpl[T]{
+		fn: func() SQLFragment {
+			return SQLFragment{
+				Query: queryFn(m.Column()),
+				Args:  vals,
+			}
+		},
 	}
+}
+
+func (a Attribute[T]) Column() string {
+	return a().Column()
 }
