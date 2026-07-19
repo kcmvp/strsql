@@ -20,7 +20,13 @@ var {{$model.Name}}Sch = struct {
 	{{- end}}
 }{
 	{{- range $field := $model.Fields}}
-	{{$field.Name}}: strsql.Of[{{$model.Name}}]("{{$field.Name}}", "{{$field.Column}}", reflect.TypeOf(*new({{$model.Name}})).Field({{$field.Index}}).Type),
+	{{$field.Name}}: strsql.Of[{{$model.Name}}]("{{$field.Name}}", "{{$field.Column}}", func() reflect.Type {
+		field, ok := reflect.TypeOf(*new({{$model.Name}})).FieldByName("{{$field.Name}}")
+		if !ok {
+			panic("strsql_gen: {{$model.Name}}.{{$field.Name}} not found")
+		}
+		return field.Type
+	}()),
 	{{- end}}
 }
 {{- end}}
