@@ -224,3 +224,62 @@ sql, args := strsql.Delete[Order]().
 
 - `And`
 - `Or`
+
+## Column Validation (`validation` package)
+
+The `validation` package provides a minimal, function-first rule carrier for column attributes.
+
+> **Design note:** Column rules are **always explicitly/manually triggered** by the caller. They are never bound to any persistence lifecycle event. Business-layer events (`BeforeInsert` / `BeforeUpdate` / `BeforeDelete`) are kept entirely separate via the `BusinessValidator` interface.
+
+### Attach rules to columns
+
+```go
+import "github.com/kcmvp/strsql/validation"
+
+nameRules := validation.For(OrderSch.Id,   validation.Required(), validation.Len(1, 64))
+priceRules := validation.For(ProductSch.Price, validation.Min(0))
+roleRules  := validation.For(UserSch.Role, validation.OneOf("admin", "user"))
+```
+
+Rules are plain `func(value any) error` functions, executed serially in the order they are defined.
+
+### Explicitly trigger validation (manual, never automatic)
+
+```go
+// Validate a single column:
+errs := nameRules.Check(someValue)
+
+// Validate multiple columns in one call (collect-all errors):
+errs = validation.CheckAll(
+    nameRules.With(req.Name),
+    priceRules.With(req.Price),
+    roleRules.With(req.Role),
+)
+if errs != nil {
+    // errs is validation.ValidationErrors — a []ValidationError for frontend display.
+}
+```
+
+### Built-in rules
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Fails on nil or zero value |
+| `Min(n)` | Numeric lower bound |
+| `Max(n)` | Numeric upper bound |
+| `Len(min, max)` | String / slice length range |
+| `OneOf(vals...)` | Enum allowlist |
+
+Custom rules are just functions matching `func(value any) error`.
+
+### Business-layer hooks (separate from column rules)
+
+Implement `validation.BusinessValidator[T]` to add persistence-event logic. This interface is **entirely decoupled** from column-rule execution:
+
+```go
+type OrderValidator struct{}
+
+func (v OrderValidator) BeforeInsert(o Order) error { /* business logic */ return nil }
+func (v OrderValidator) BeforeUpdate(o Order) error { /* business logic */ return nil }
+func (v OrderValidator) BeforeDelete(o Order) error { /* business logic */ return nil }
+```
