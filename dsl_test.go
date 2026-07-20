@@ -269,6 +269,18 @@ func TestFailFastPanics(t *testing.T) {
 			},
 		},
 		{
+			name: "InvalidSelect_MixedEntityColumns",
+			panicAction: func() {
+				strsql.Select[Product](OrderSch.ID)
+			},
+		},
+		{
+			name: "InvalidAggregate_Count_with_multiple_columns",
+			panicAction: func() {
+				strsql.Count(OrderSch.ID, OrderSch.CustomerID)
+			},
+		},
+		{
 			name: "EmptyInClause_No_variadic_arguments",
 			panicAction: func() {
 				strsql.In(OrderSch.ID)

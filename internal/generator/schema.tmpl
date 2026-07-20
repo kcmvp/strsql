@@ -12,7 +12,18 @@ func typeOf[T any]() reflect.Type {
 	return reflect.TypeOf(*new(T))
 }
 
+// Helper function to safely get a field type by name.
+func fieldType(typ reflect.Type, name string) reflect.Type {
+	field, ok := typ.FieldByName(name)
+	if !ok {
+		panic("strsql_gen: " + typ.String() + "." + name + " not found")
+	}
+	return field.Type
+}
+
 {{- range $model := .Models}}
+var _{{$model.Name}}Type = typeOf[{{$model.Name}}]()
+
 // {{$model.Name}}Sch is the schema mapping for the {{$model.Name}} entity.
 var {{$model.Name}}Sch = struct {
 	{{- range $field := $model.Fields}}
@@ -20,7 +31,7 @@ var {{$model.Name}}Sch = struct {
 	{{- end}}
 }{
 	{{- range $field := $model.Fields}}
-	{{$field.Name}}: strsql.Of[{{$model.Name}}]("{{$field.Name}}", "{{$field.Column}}", reflect.TypeOf(*new({{$model.Name}})).Field({{$field.Index}}).Type),
+	{{$field.Name}}: strsql.Of[{{$model.Name}}]("{{$field.Name}}", "{{$field.Column}}", fieldType(_{{$model.Name}}Type, "{{$field.Name}}")),
 	{{- end}}
 }
 {{- end}}

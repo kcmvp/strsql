@@ -41,15 +41,21 @@ type Mapping[T Entity] interface {
 // It provides a dot-chaining experience for users (e.g., OrderSch.Id).
 type Attribute[T Entity] func() Mapping[T]
 
-// SelectCol is an interface representing a column to be selected.
-// It can be a simple Attribute or an Aggregate function.
+// SelectCol is an interface representing a selectable SQL expression.
+// It can be a simple Attribute or an aggregate function.
 type SelectCol interface {
 	SelectSQL() string
+	selectEntityType() reflect.Type
 }
 
-// Ensure Attribute implements SelectCol
+// SelectSQL implements [SelectCol].
 func (a Attribute[T]) SelectSQL() string {
 	return a().Column()
+}
+
+// selectEntityType implements [SelectCol].
+func (a Attribute[T]) selectEntityType() reflect.Type {
+	return reflect.TypeOf(*new(T))
 }
 
 // SQLFragment holds the generated SQL query string and its corresponding arguments.
@@ -128,6 +134,10 @@ type DeleteBuilder[T Entity] interface {
 // Select initializes a SELECT query builder for the given Entity.
 // If no columns are provided, it defaults to SELECT *.
 func Select[T Entity](cols ...SelectCol) SelectBuilder[T] {
+	entityType := reflect.TypeOf(*new(T))
+	for _, col := range cols {
+		ensureSelectColEntity(entityType, col)
+	}
 	return &selectStatement[T]{cols: cols}
 }
 
@@ -147,43 +157,52 @@ func Delete[T Entity]() DeleteBuilder[T] {
 
 type aggregateFunc struct {
 	expr string
+	typ  reflect.Type
 }
 
 func (a aggregateFunc) SelectSQL() string {
 	return a.expr
 }
 
+func (a aggregateFunc) selectEntityType() reflect.Type {
+	return a.typ
+}
+
 // Count constructs a COUNT(column) aggregate.
 // If no attribute is provided, it defaults to COUNT(*).
 func Count[T Entity](attrs ...Attribute[T]) SelectCol {
+	entityType := reflect.TypeOf(*new(T))
 	if len(attrs) == 0 {
-		return aggregateFunc{expr: "COUNT(*)"}
+		return aggregateFunc{expr: "COUNT(*)", typ: entityType}
 	}
-	return aggregateFunc{expr: fmt.Sprintf("COUNT(%s)", attrs[0]().Column())}
+	if len(attrs) > 1 {
+		panic("Fail-Fast: COUNT accepts at most one column")
+	}
+	return aggregateFunc{expr: fmt.Sprintf("COUNT(%s)", attrs[0]().Column()), typ: entityType}
 }
 
 // Sum constructs a SUM(column) aggregate.
 // It will fail-fast if the column is not numeric.
 func Sum[T Entity](attr Attribute[T]) SelectCol {
 	validateNumeric(attr(), nil) // val is nil because we only check the column type
-	return aggregateFunc{expr: fmt.Sprintf("SUM(%s)", attr().Column())}
+	return aggregateFunc{expr: fmt.Sprintf("SUM(%s)", attr().Column()), typ: reflect.TypeOf(*new(T))}
 }
 
 // Max constructs a MAX(column) aggregate.
 func Max[T Entity](attr Attribute[T]) SelectCol {
-	return aggregateFunc{expr: fmt.Sprintf("MAX(%s)", attr().Column())}
+	return aggregateFunc{expr: fmt.Sprintf("MAX(%s)", attr().Column()), typ: reflect.TypeOf(*new(T))}
 }
 
 // Min constructs a MIN(column) aggregate.
 func Min[T Entity](attr Attribute[T]) SelectCol {
-	return aggregateFunc{expr: fmt.Sprintf("MIN(%s)", attr().Column())}
+	return aggregateFunc{expr: fmt.Sprintf("MIN(%s)", attr().Column()), typ: reflect.TypeOf(*new(T))}
 }
 
 // Avg constructs an AVG(column) aggregate.
 // It will fail-fast if the column is not numeric.
 func Avg[T Entity](attr Attribute[T]) SelectCol {
 	validateNumeric(attr(), nil)
-	return aggregateFunc{expr: fmt.Sprintf("AVG(%s)", attr().Column())}
+	return aggregateFunc{expr: fmt.Sprintf("AVG(%s)", attr().Column()), typ: reflect.TypeOf(*new(T))}
 }
 
 // ============================================================================
@@ -603,6 +622,17 @@ func validateNumeric(meta Mapping[Entity], vals ...any) {
 func validateNotEmpty(meta Mapping[Entity], vals ...any) {
 	if len(vals) == 0 {
 		panic(fmt.Sprintf("Fail-Fast: condition for column '%s' requires at least one value", meta.Column()))
+	}
+}
+
+// ensureSelectColEntity ensures the selected expression belongs to the same entity as the FROM table.
+func ensureSelectColEntity(entityType reflect.Type, col SelectCol) {
+	if col.selectEntityType() != entityType {
+		panic(fmt.Sprintf(
+			"Fail-Fast: selected expression belongs to entity %s, but SELECT targets %s",
+			col.selectEntityType(),
+			entityType,
+		))
 	}
 }
 

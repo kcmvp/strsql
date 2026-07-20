@@ -12,6 +12,17 @@ func typeOf[T any]() reflect.Type {
 	return reflect.TypeOf(*new(T))
 }
 
+// Helper function to safely get a field type by name.
+func fieldType(typ reflect.Type, name string) reflect.Type {
+	field, ok := typ.FieldByName(name)
+	if !ok {
+		panic("strsql_gen: " + typ.String() + "." + name + " not found")
+	}
+	return field.Type
+}
+
+var _ProductType = typeOf[Product]()
+
 // ProductSch is the schema mapping for the Product entity.
 var ProductSch = struct {
 	ID    strsql.Attribute[Product]
@@ -19,11 +30,12 @@ var ProductSch = struct {
 	Price strsql.Attribute[Product]
 	Stock strsql.Attribute[Product]
 }{
-	ID:    strsql.Of[Product]("ID", "id", reflect.TypeOf(*new(Product)).Field(0).Type),
-	Name:  strsql.Of[Product]("Name", "name", reflect.TypeOf(*new(Product)).Field(1).Type),
-	Price: strsql.Of[Product]("Price", "price", reflect.TypeOf(*new(Product)).Field(2).Type),
-	Stock: strsql.Of[Product]("Stock", "stock", reflect.TypeOf(*new(Product)).Field(3).Type),
+	ID:    strsql.Of[Product]("ID", "id", fieldType(_ProductType, "ID")),
+	Name:  strsql.Of[Product]("Name", "name", fieldType(_ProductType, "Name")),
+	Price: strsql.Of[Product]("Price", "price", fieldType(_ProductType, "Price")),
+	Stock: strsql.Of[Product]("Stock", "stock", fieldType(_ProductType, "Stock")),
 }
+var _OrderType = typeOf[Order]()
 
 // OrderSch is the schema mapping for the Order entity.
 var OrderSch = struct {
@@ -33,12 +45,13 @@ var OrderSch = struct {
 	IsPaid     strsql.Attribute[Order]
 	CreatedAt  strsql.Attribute[Order]
 }{
-	ID:         strsql.Of[Order]("ID", "id", reflect.TypeOf(*new(Order)).Field(0).Type),
-	CustomerID: strsql.Of[Order]("CustomerID", "customer_id", reflect.TypeOf(*new(Order)).Field(1).Type),
-	Status:     strsql.Of[Order]("Status", "status", reflect.TypeOf(*new(Order)).Field(2).Type),
-	IsPaid:     strsql.Of[Order]("IsPaid", "is_paid", reflect.TypeOf(*new(Order)).Field(3).Type),
-	CreatedAt:  strsql.Of[Order]("CreatedAt", "created_at", reflect.TypeOf(*new(Order)).Field(4).Type),
+	ID:         strsql.Of[Order]("ID", "id", fieldType(_OrderType, "ID")),
+	CustomerID: strsql.Of[Order]("CustomerID", "customer_id", fieldType(_OrderType, "CustomerID")),
+	Status:     strsql.Of[Order]("Status", "status", fieldType(_OrderType, "Status")),
+	IsPaid:     strsql.Of[Order]("IsPaid", "is_paid", fieldType(_OrderType, "IsPaid")),
+	CreatedAt:  strsql.Of[Order]("CreatedAt", "created_at", fieldType(_OrderType, "CreatedAt")),
 }
+var _OrderItemType = typeOf[OrderItem]()
 
 // OrderItemSch is the schema mapping for the OrderItem entity.
 var OrderItemSch = struct {
@@ -48,9 +61,9 @@ var OrderItemSch = struct {
 	Quantity  strsql.Attribute[OrderItem]
 	UnitPrice strsql.Attribute[OrderItem]
 }{
-	ID:        strsql.Of[OrderItem]("ID", "id", reflect.TypeOf(*new(OrderItem)).Field(0).Type),
-	OrderID:   strsql.Of[OrderItem]("OrderID", "order_id", reflect.TypeOf(*new(OrderItem)).Field(1).Type),
-	ProductID: strsql.Of[OrderItem]("ProductID", "product_id", reflect.TypeOf(*new(OrderItem)).Field(2).Type),
-	Quantity:  strsql.Of[OrderItem]("Quantity", "quantity", reflect.TypeOf(*new(OrderItem)).Field(3).Type),
-	UnitPrice: strsql.Of[OrderItem]("UnitPrice", "unit_price", reflect.TypeOf(*new(OrderItem)).Field(4).Type),
+	ID:        strsql.Of[OrderItem]("ID", "id", fieldType(_OrderItemType, "ID")),
+	OrderID:   strsql.Of[OrderItem]("OrderID", "order_id", fieldType(_OrderItemType, "OrderID")),
+	ProductID: strsql.Of[OrderItem]("ProductID", "product_id", fieldType(_OrderItemType, "ProductID")),
+	Quantity:  strsql.Of[OrderItem]("Quantity", "quantity", fieldType(_OrderItemType, "Quantity")),
+	UnitPrice: strsql.Of[OrderItem]("UnitPrice", "unit_price", fieldType(_OrderItemType, "UnitPrice")),
 }
