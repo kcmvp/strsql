@@ -12,6 +12,17 @@ func typeOf[T any]() reflect.Type {
 	return reflect.TypeOf(*new(T))
 }
 
+// Helper function to safely get a field type by name.
+func fieldType(typ reflect.Type, name string) reflect.Type {
+	field, ok := typ.FieldByName(name)
+	if !ok {
+		panic("strsql_gen: " + typ.String() + "." + name + " not found")
+	}
+	return field.Type
+}
+
+var _ProductType = typeOf[Product]()
+
 // ProductSch is the schema mapping for the Product entity.
 var ProductSch = struct {
 	ID    strsql.Attribute[Product]
@@ -19,35 +30,12 @@ var ProductSch = struct {
 	Price strsql.Attribute[Product]
 	Stock strsql.Attribute[Product]
 }{
-	ID: strsql.Of[Product]("ID", "id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Product)).FieldByName("ID")
-		if !ok {
-			panic("strsql_gen: Product.ID not found")
-		}
-		return field.Type
-	}()),
-	Name: strsql.Of[Product]("Name", "name", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Product)).FieldByName("Name")
-		if !ok {
-			panic("strsql_gen: Product.Name not found")
-		}
-		return field.Type
-	}()),
-	Price: strsql.Of[Product]("Price", "price", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Product)).FieldByName("Price")
-		if !ok {
-			panic("strsql_gen: Product.Price not found")
-		}
-		return field.Type
-	}()),
-	Stock: strsql.Of[Product]("Stock", "stock", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Product)).FieldByName("Stock")
-		if !ok {
-			panic("strsql_gen: Product.Stock not found")
-		}
-		return field.Type
-	}()),
+	ID:    strsql.Of[Product]("ID", "id", fieldType(_ProductType, "ID")),
+	Name:  strsql.Of[Product]("Name", "name", fieldType(_ProductType, "Name")),
+	Price: strsql.Of[Product]("Price", "price", fieldType(_ProductType, "Price")),
+	Stock: strsql.Of[Product]("Stock", "stock", fieldType(_ProductType, "Stock")),
 }
+var _OrderType = typeOf[Order]()
 
 // OrderSch is the schema mapping for the Order entity.
 var OrderSch = struct {
@@ -57,42 +45,13 @@ var OrderSch = struct {
 	IsPaid     strsql.Attribute[Order]
 	CreatedAt  strsql.Attribute[Order]
 }{
-	ID: strsql.Of[Order]("ID", "id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Order)).FieldByName("ID")
-		if !ok {
-			panic("strsql_gen: Order.ID not found")
-		}
-		return field.Type
-	}()),
-	CustomerID: strsql.Of[Order]("CustomerID", "customer_id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Order)).FieldByName("CustomerID")
-		if !ok {
-			panic("strsql_gen: Order.CustomerID not found")
-		}
-		return field.Type
-	}()),
-	Status: strsql.Of[Order]("Status", "status", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Order)).FieldByName("Status")
-		if !ok {
-			panic("strsql_gen: Order.Status not found")
-		}
-		return field.Type
-	}()),
-	IsPaid: strsql.Of[Order]("IsPaid", "is_paid", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Order)).FieldByName("IsPaid")
-		if !ok {
-			panic("strsql_gen: Order.IsPaid not found")
-		}
-		return field.Type
-	}()),
-	CreatedAt: strsql.Of[Order]("CreatedAt", "created_at", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(Order)).FieldByName("CreatedAt")
-		if !ok {
-			panic("strsql_gen: Order.CreatedAt not found")
-		}
-		return field.Type
-	}()),
+	ID:         strsql.Of[Order]("ID", "id", fieldType(_OrderType, "ID")),
+	CustomerID: strsql.Of[Order]("CustomerID", "customer_id", fieldType(_OrderType, "CustomerID")),
+	Status:     strsql.Of[Order]("Status", "status", fieldType(_OrderType, "Status")),
+	IsPaid:     strsql.Of[Order]("IsPaid", "is_paid", fieldType(_OrderType, "IsPaid")),
+	CreatedAt:  strsql.Of[Order]("CreatedAt", "created_at", fieldType(_OrderType, "CreatedAt")),
 }
+var _OrderItemType = typeOf[OrderItem]()
 
 // OrderItemSch is the schema mapping for the OrderItem entity.
 var OrderItemSch = struct {
@@ -102,39 +61,9 @@ var OrderItemSch = struct {
 	Quantity  strsql.Attribute[OrderItem]
 	UnitPrice strsql.Attribute[OrderItem]
 }{
-	ID: strsql.Of[OrderItem]("ID", "id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(OrderItem)).FieldByName("ID")
-		if !ok {
-			panic("strsql_gen: OrderItem.ID not found")
-		}
-		return field.Type
-	}()),
-	OrderID: strsql.Of[OrderItem]("OrderID", "order_id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(OrderItem)).FieldByName("OrderID")
-		if !ok {
-			panic("strsql_gen: OrderItem.OrderID not found")
-		}
-		return field.Type
-	}()),
-	ProductID: strsql.Of[OrderItem]("ProductID", "product_id", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(OrderItem)).FieldByName("ProductID")
-		if !ok {
-			panic("strsql_gen: OrderItem.ProductID not found")
-		}
-		return field.Type
-	}()),
-	Quantity: strsql.Of[OrderItem]("Quantity", "quantity", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(OrderItem)).FieldByName("Quantity")
-		if !ok {
-			panic("strsql_gen: OrderItem.Quantity not found")
-		}
-		return field.Type
-	}()),
-	UnitPrice: strsql.Of[OrderItem]("UnitPrice", "unit_price", func() reflect.Type {
-		field, ok := reflect.TypeOf(*new(OrderItem)).FieldByName("UnitPrice")
-		if !ok {
-			panic("strsql_gen: OrderItem.UnitPrice not found")
-		}
-		return field.Type
-	}()),
+	ID:        strsql.Of[OrderItem]("ID", "id", fieldType(_OrderItemType, "ID")),
+	OrderID:   strsql.Of[OrderItem]("OrderID", "order_id", fieldType(_OrderItemType, "OrderID")),
+	ProductID: strsql.Of[OrderItem]("ProductID", "product_id", fieldType(_OrderItemType, "ProductID")),
+	Quantity:  strsql.Of[OrderItem]("Quantity", "quantity", fieldType(_OrderItemType, "Quantity")),
+	UnitPrice: strsql.Of[OrderItem]("UnitPrice", "unit_price", fieldType(_OrderItemType, "UnitPrice")),
 }
