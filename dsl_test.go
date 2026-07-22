@@ -127,12 +127,112 @@ func TestSelectBuilder(t *testing.T) {
 			name: "Select_WithEmptyAndOr",
 			builder: strsql.Select[Order]().
 				Where(
-					strsql.And[Order](),
-					strsql.Or[Order](),
+					strsql.And(),
+					strsql.Or(),
 					strsql.And(strsql.Eq(OrderSch.ID, "ORD-123")),
 					strsql.Or(strsql.Eq(OrderSch.Status, 1)),
 				),
 			expectedArgs: []any{"ORD-123", 1},
+		},
+		{
+			name: "Select_TableAliasOnly",
+			builder: func() strsql.Builder {
+				o := strsql.Alias[Order]("o")
+				return strsql.Select[Order]().
+					As(o.Name()).
+					Where(strsql.Eq(o.Col(OrderSch.ID), "ORD-123"))
+			}(),
+			expectedArgs: []any{"ORD-123"},
+		},
+		{
+			name: "Select_ColumnAlias",
+			builder: strsql.Select[Product](
+				strsql.AsCol(ProductSch.ID, "product_id"),
+				strsql.AsCol(ProductSch.Name, "product_name"),
+			).Where(strsql.Eq(ProductSch.ID, "P-1")),
+			expectedArgs: []any{"P-1"},
+		},
+		{
+			name:         "Select_AggregateAlias",
+			builder:      strsql.Select[Order](strsql.AsCol(strsql.Count[Order](), "cnt")),
+			expectedArgs: nil,
+		},
+		{
+			name: "Select_Join_InnerSimple",
+			builder: func() strsql.Builder {
+				o := strsql.Alias[Order]("o")
+				oi := strsql.Alias[OrderItem]("oi")
+				return strsql.Select[Order]().
+					As(o.Name()).
+					InnerJoin(
+						oi.Ref(),
+						strsql.ColEq(o.Col(OrderSch.ID), oi.Col(OrderItemSch.OrderID)),
+					).
+					Where(strsql.Eq(oi.Col(OrderItemSch.ProductID), "P-1"))
+			}(),
+			expectedArgs: []any{"P-1"},
+		},
+		{
+			name: "Select_Join_MultiJoinWithColumns",
+			builder: func() strsql.Builder {
+				o := strsql.Alias[Order]("o")
+				oi := strsql.Alias[OrderItem]("oi")
+				p := strsql.Alias[Product]("p")
+				return strsql.Select[Order](
+					o.Col(OrderSch.ID),
+					p.Col(ProductSch.Name),
+				).
+					As(o.Name()).
+					InnerJoin(
+						oi.Ref(),
+						strsql.ColEq(o.Col(OrderSch.ID), oi.Col(OrderItemSch.OrderID)),
+					).
+					InnerJoin(
+						p.Ref(),
+						strsql.ColEq(oi.Col(OrderItemSch.ProductID), p.Col(ProductSch.ID)),
+					).
+					Where(strsql.Gt(p.Col(ProductSch.Price), 10.0)).
+					OrderBy(o.Col(OrderSch.CreatedAt), strsql.Desc).
+					Limit(10)
+			}(),
+			expectedArgs: []any{10.0},
+		},
+		{
+			name: "Select_Join_WithOr",
+			builder: func() strsql.Builder {
+				o := strsql.Alias[Order]("o")
+				oi := strsql.Alias[OrderItem]("oi")
+				return strsql.Select[Order]().
+					As(o.Name()).
+					InnerJoin(
+						oi.Ref(),
+						strsql.ColEq(o.Col(OrderSch.ID), oi.Col(OrderItemSch.OrderID)),
+					).
+					Where(
+						strsql.Or(
+							strsql.Eq(oi.Col(OrderItemSch.ProductID), "P-1"),
+							strsql.Eq(oi.Col(OrderItemSch.ProductID), "P-2"),
+						),
+					).
+					Limit(1)
+			}(),
+			expectedArgs: []any{"P-1", "P-2"},
+		},
+		{
+			name: "Select_Join_RightJoin",
+			builder: func() strsql.Builder {
+				o := strsql.Alias[Order]("o")
+				oi := strsql.Alias[OrderItem]("oi")
+				return strsql.Select[Order]().
+					As(o.Name()).
+					RightJoin(
+						oi.Ref(),
+						strsql.ColEq(o.Col(OrderSch.ID), oi.Col(OrderItemSch.OrderID)),
+					).
+					Where(strsql.Eq(oi.Col(OrderItemSch.ProductID), "P-1")).
+					Limit(1)
+			}(),
+			expectedArgs: []any{"P-1"},
 		},
 	}
 
@@ -271,7 +371,7 @@ func TestFailFastPanics(t *testing.T) {
 		{
 			name: "InvalidSelect_MixedEntityColumns",
 			panicAction: func() {
-				strsql.Select[Product](OrderSch.ID)
+				strsql.Select[Product](OrderSch.ID).Build()
 			},
 		},
 		{
