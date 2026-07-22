@@ -65,7 +65,7 @@ type SQLFragment struct {
 }
 
 // Predicate is a closure that evaluates to a SQL condition fragment.
-type Predicate[T Entity] func() SQLFragment
+type Predicate[T Entity] = func() SQLFragment
 
 // Assignment is a closure that evaluates to a SQL assignment fragment (e.g., for UPDATE).
 type Assignment[T Entity] func() SQLFragment
@@ -84,6 +84,55 @@ type Validator func(meta Mapping[Entity], vals ...any)
 // ============================================================================
 // Builder Traits (Public)
 // ============================================================================
+
+// TableAlias is a typed alias context for an Entity.
+// It helps qualify columns without repeating alias strings everywhere.
+type TableAlias[T Entity] struct {
+	name string
+}
+
+// Alias constructs a typed table alias.
+func Alias[T Entity](name string) TableAlias[T] {
+	return TableAlias[T]{name: name}
+}
+
+// Name returns the alias name (e.g., "o").
+func (a TableAlias[T]) Name() string {
+	return a.name
+}
+
+// Col qualifies an attribute with the alias: "<alias>.<column>".
+func (a TableAlias[T]) Col(attr Attribute[T]) Attribute[T] {
+	return Qual(attr, a.name)
+}
+
+// Ref returns a TableRef for JOIN clauses.
+func (a TableAlias[T]) Ref() TableRef {
+	return Table[T](a.name)
+}
+
+// TableRef is a typed table reference used by JOIN clauses.
+// It carries the table name, optional alias, and the entity reflect.Type for
+// SELECT column validation.
+type TableRef struct {
+	table string
+	alias string
+	typ   reflect.Type
+}
+
+// Table constructs a TableRef for the given Entity, optionally with an alias.
+func Table[T Entity](alias ...string) TableRef {
+	var a string
+	if len(alias) > 0 {
+		a = alias[0]
+	}
+	model := *new(T)
+	return TableRef{
+		table: model.TableName(),
+		alias: a,
+		typ:   reflect.TypeOf(*new(T)),
+	}
+}
 
 // Builder is the final stage of SQL construction, generating the query and args.
 type Builder interface {
@@ -106,6 +155,14 @@ type OrderByTrait[T Entity] interface {
 
 // SelectBuilder is the entry stage of building a SELECT query.
 type SelectBuilder[T Entity] interface {
+	// As sets the alias for the FROM table.
+	As(alias string) SelectBuilder[T]
+	// InnerJoin appends an INNER JOIN clause.
+	InnerJoin(target TableRef, on func() SQLFragment) SelectBuilder[T]
+	// LeftJoin appends a LEFT JOIN clause.
+	LeftJoin(target TableRef, on func() SQLFragment) SelectBuilder[T]
+	// RightJoin appends a RIGHT JOIN clause.
+	RightJoin(target TableRef, on func() SQLFragment) SelectBuilder[T]
 	Where(preds ...Predicate[T]) OrderByTrait[T]
 	OrderByTrait[T]
 }
@@ -134,10 +191,6 @@ type DeleteBuilder[T Entity] interface {
 // Select initializes a SELECT query builder for the given Entity.
 // If no columns are provided, it defaults to SELECT *.
 func Select[T Entity](cols ...SelectCol) SelectBuilder[T] {
-	entityType := reflect.TypeOf(*new(T))
-	for _, col := range cols {
-		ensureSelectColEntity(entityType, col)
-	}
 	return &selectStatement[T]{cols: cols}
 }
 
@@ -205,6 +258,24 @@ func Avg[T Entity](attr Attribute[T]) SelectCol {
 	return aggregateFunc{expr: fmt.Sprintf("AVG(%s)", attr().Column()), typ: reflect.TypeOf(*new(T))}
 }
 
+type aliasedSelectCol struct {
+	col   SelectCol
+	alias string
+}
+
+func (c aliasedSelectCol) SelectSQL() string {
+	return fmt.Sprintf("%s AS %s", c.col.SelectSQL(), c.alias)
+}
+
+func (c aliasedSelectCol) selectEntityType() reflect.Type {
+	return c.col.selectEntityType()
+}
+
+// AsCol adds an alias to a selectable expression: "<expr> AS <alias>".
+func AsCol(col SelectCol, alias string) SelectCol {
+	return aliasedSelectCol{col: col, alias: alias}
+}
+
 // ============================================================================
 // Assignments (Public)
 // ============================================================================
@@ -233,6 +304,44 @@ func DecrNum[T Entity](attr Attribute[T], val any) Assignment[T] {
 // ============================================================================
 // Predicates & Logic Combinators (Public)
 // ============================================================================
+
+// ColEq constructs a cross-entity equality condition: left_col = right_col.
+// It fails fast if the two column types do not match.
+func ColEq[A Entity, B Entity](a Attribute[A], b Attribute[B]) func() SQLFragment {
+	ma := a()
+	mb := b()
+	if ma.Type() != mb.Type() {
+		panic(fmt.Sprintf(
+			"Fail-Fast: Type mismatch for join columns. Left '%s' is %s, right '%s' is %s",
+			ma.Column(),
+			ma.Type(),
+			mb.Column(),
+			mb.Type(),
+		))
+	}
+	return func() SQLFragment {
+		return SQLFragment{
+			Query: fmt.Sprintf("%s = %s", ma.Column(), mb.Column()),
+		}
+	}
+}
+
+// Qual qualifies an attribute with a table alias, producing "<alias>.<column>".
+// It's optional and intended to avoid ambiguous column names in JOIN queries.
+func Qual[T Entity](attr Attribute[T], alias string) Attribute[T] {
+	return func() Mapping[T] {
+		meta := attr()
+		col := meta.Column()
+		if alias != "" {
+			col = alias + "." + col
+		}
+		return mapping[T]{
+			name:   meta.Name(),
+			column: col,
+			typ:    meta.Type(),
+		}
+	}
+}
 
 // Eq constructs an equality condition: column = ?
 func Eq[T Entity](attr Attribute[T], val any) Predicate[T] {
@@ -334,7 +443,7 @@ func Between[T Entity](attr Attribute[T], start, end any) Predicate[T] {
 }
 
 // And combines multiple predicates with logical AND: (cond1 AND cond2 AND ...)
-func And[T Entity](preds ...Predicate[T]) Predicate[T] {
+func And(preds ...func() SQLFragment) func() SQLFragment {
 	return func() SQLFragment {
 		if len(preds) == 0 {
 			return SQLFragment{}
@@ -363,7 +472,7 @@ func And[T Entity](preds ...Predicate[T]) Predicate[T] {
 }
 
 // Or combines multiple predicates with logical OR: (cond1 OR cond2 OR ...)
-func Or[T Entity](preds ...Predicate[T]) Predicate[T] {
+func Or(preds ...func() SQLFragment) func() SQLFragment {
 	return func() SQLFragment {
 		if len(preds) == 0 {
 			return SQLFragment{}
@@ -429,9 +538,54 @@ func (m mapping[T]) mark() seal {
 type selectStatement[T Entity] struct {
 	cols   []SelectCol
 	wheres []SQLFragment
+	joins  []joinClause
+	alias  string
 	orders []string
 	limit  int
 	offset int
+}
+
+// joinClause represents a JOIN clause attached to a SELECT statement.
+type joinClause struct {
+	kind   string
+	target TableRef
+	on     SQLFragment
+}
+
+// As implements [SelectBuilder] and sets the alias for the FROM table.
+func (s *selectStatement[T]) As(alias string) SelectBuilder[T] {
+	s.alias = alias
+	return s
+}
+
+// InnerJoin implements [SelectBuilder] and appends an INNER JOIN clause.
+func (s *selectStatement[T]) InnerJoin(target TableRef, on func() SQLFragment) SelectBuilder[T] {
+	frag := on()
+	if frag.Query == "" {
+		panic("Fail-Fast: JOIN ON condition cannot be empty")
+	}
+	s.joins = append(s.joins, joinClause{kind: "INNER", target: target, on: frag})
+	return s
+}
+
+// LeftJoin implements [SelectBuilder] and appends a LEFT JOIN clause.
+func (s *selectStatement[T]) LeftJoin(target TableRef, on func() SQLFragment) SelectBuilder[T] {
+	frag := on()
+	if frag.Query == "" {
+		panic("Fail-Fast: JOIN ON condition cannot be empty")
+	}
+	s.joins = append(s.joins, joinClause{kind: "LEFT", target: target, on: frag})
+	return s
+}
+
+// RightJoin implements [SelectBuilder] and appends a RIGHT JOIN clause.
+func (s *selectStatement[T]) RightJoin(target TableRef, on func() SQLFragment) SelectBuilder[T] {
+	frag := on()
+	if frag.Query == "" {
+		panic("Fail-Fast: JOIN ON condition cannot be empty")
+	}
+	s.joins = append(s.joins, joinClause{kind: "RIGHT", target: target, on: frag})
+	return s
 }
 
 func (s *selectStatement[T]) Where(preds ...Predicate[T]) OrderByTrait[T] {
@@ -464,14 +618,33 @@ func (s *selectStatement[T]) Build() (string, []any) {
 
 	model := *new(T)
 
+	allowedEntityTypes := map[reflect.Type]struct{}{
+		reflect.TypeOf(*new(T)): {},
+	}
+	for _, j := range s.joins {
+		allowedEntityTypes[j.target.typ] = struct{}{}
+	}
+
 	if len(s.cols) == 0 {
-		fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", model.TableName())
+		fmt.Fprintf(&queryBuilder, "SELECT * FROM %s", buildTableRef(model.TableName(), s.alias))
 	} else {
 		var colNames []string
 		for _, col := range s.cols {
+			ensureSelectColAllowed(allowedEntityTypes, col)
 			colNames = append(colNames, col.SelectSQL())
 		}
-		fmt.Fprintf(&queryBuilder, "SELECT %s FROM %s", strings.Join(colNames, ", "), model.TableName())
+		fmt.Fprintf(&queryBuilder, "SELECT %s FROM %s", strings.Join(colNames, ", "), buildTableRef(model.TableName(), s.alias))
+	}
+
+	for _, j := range s.joins {
+		fmt.Fprintf(
+			&queryBuilder,
+			" %s JOIN %s ON %s",
+			j.kind,
+			buildTableRef(j.target.table, j.target.alias),
+			j.on.Query,
+		)
+		finalArgs = append(finalArgs, j.on.Args...)
 	}
 
 	if len(s.wheres) > 0 {
@@ -634,6 +807,32 @@ func ensureSelectColEntity(entityType reflect.Type, col SelectCol) {
 			entityType,
 		))
 	}
+}
+
+// ensureSelectColAllowed ensures the selected expression belongs to one of the
+// allowed entities (FROM entity + joined entities).
+func ensureSelectColAllowed(allowed map[reflect.Type]struct{}, col SelectCol) {
+	if _, ok := allowed[col.selectEntityType()]; ok {
+		return
+	}
+	var anyAllowed reflect.Type
+	for t := range allowed {
+		anyAllowed = t
+		break
+	}
+	panic(fmt.Sprintf(
+		"Fail-Fast: selected expression belongs to entity %s, but SELECT targets %s",
+		col.selectEntityType(),
+		anyAllowed,
+	))
+}
+
+// buildTableRef builds the SQL fragment for a table reference, optionally with an alias.
+func buildTableRef(table string, alias string) string {
+	if alias == "" {
+		return table
+	}
+	return fmt.Sprintf("%s AS %s", table, alias)
 }
 
 // wrapOp is a higher-order function that extracts metadata, runs validators,
